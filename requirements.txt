@@ -1,1 +1,10 @@
-
+python-dotenv
+websockets
+flask
+twilio
+requests
+asyncio
+google-genai
+python-dateutil
+gunicorn
+uvicorn
