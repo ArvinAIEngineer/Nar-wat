@@ -69,7 +69,7 @@ CURRENT_CAMPAIGNS = ["Education Fund", "Healthcare Initiative", "Clean Water Pro
 
 def identify_intent(query):
     query_lower = query.lower()
-    
+
     # More detailed intent identification
     if any(word in query_lower for word in ["donate", "contribution", "give", "support", "contribute", "payment"]):
         return "donation_intent"
@@ -92,15 +92,15 @@ def extract_info_from_query(query):
     # Extract UTR if mentioned
     utr_match = re.search(r'UTR\d+', query, re.IGNORECASE)
     utr = utr_match.group(0) if utr_match else None
-    
+
     # Extract amount if mentioned
     amount_match = re.search(r'₹\s*(\d+)', query) or re.search(r'Rs\.?\s*(\d+)', query) or re.search(r'(\d+)\s*rupees', query, re.IGNORECASE)
     amount = amount_match.group(1) if amount_match else None
-    
+
     # Extract phone number if mentioned
     phone_match = re.search(r'(\+91\s?)?[789]\d{9}', query) or re.search(r'(\+91\s?)?[789]\d\d\d\d\s?\d\d\d\d\d', query)
     phone = phone_match.group(0) if phone_match else None
-    
+
     # Extract name if mentioned (simple version)
     name_indicators = ["name is", "this is", "called", "speaking", "named", "by the name"]
     name = None
@@ -112,14 +112,14 @@ def extract_info_from_query(query):
                 if len(potential_name) > 2:  # Avoid picking up small words
                     name = potential_name
                     break
-    
+
     # Check for specific names in the text
     common_names = ["Arvin", "Rajesh", "Priya", "Amit", "Sneha"]
     for common_name in common_names:
         if common_name.lower() in query.lower():
             name = common_name
             break
-    
+
     return {"utr": utr, "amount": amount, "phone": phone, "name": name}
 
 def get_user_id_from_info(extracted_info, phone_number=None):
@@ -129,38 +129,38 @@ def get_user_id_from_info(extracted_info, phone_number=None):
         # Remove any 'whatsapp:' prefix
         if phone_number.startswith("whatsapp:"):
             phone_number = phone_number[9:]
-        
+
         # Try to standardize phone format
         clean_phone = re.sub(r'\s+', '', phone_number)
-    
+
     # Try to match by phone number first
     if clean_phone:
         for id, phone in DONOR_PHONE_NUMBERS.items():
             if clean_phone in phone.replace(" ", ""):
                 return id
-    
+
     # Determine user ID from extracted information
     if extracted_info["utr"]:
         for id, donations in DUMMY_DONATIONS.items():
             if any(d.get("utr", "") == extracted_info["utr"] for d in donations):
                 return id
-    
+
     # If no UTR match, try to match by name
     if extracted_info["name"]:
         for id, donations in DUMMY_DONATIONS.items():
             if donations and any(extracted_info["name"].lower() in d.get("donor_name", "").lower() for d in donations):
                 return id
-    
+
     # Check if the extracted phone number corresponds to any donor
     if extracted_info["phone"]:
         for id, phone in DONOR_PHONE_NUMBERS.items():
             if extracted_info["phone"] in phone.replace(" ", ""):
                 return id
-    
+
     # Special case for Arvin
     if extracted_info["name"] == "Arvin" or (extracted_info["phone"] and "97800" in extracted_info["phone"]):
         return 6
-    
+
     # Default to user 1 or a random user
     return random.choice([1, 2, 3, 4])
 
@@ -170,10 +170,10 @@ async def generate_response(query, phone_number):
     # Extract information and identify intent
     extracted_info = extract_info_from_query(query)
     intent = identify_intent(query)
-    
+
     # Determine user ID
     user_id = get_user_id_from_info(extracted_info, phone_number)
-    
+
     # Build user context with detailed information
     if user_id in DUMMY_DONATIONS and DUMMY_DONATIONS[user_id]:
         user_context = f"\nDonor Information:\nName: {DUMMY_DONATIONS[user_id][0].get('donor_name')}\nPhone: {DONOR_PHONE_NUMBERS.get(user_id)}\nEmail: {DONOR_EMAILS.get(user_id)}\n\nDonation History:\n"
@@ -182,14 +182,14 @@ async def generate_response(query, phone_number):
             user_context += f"- ₹{d.get('amount')} on {d.get('date')} for {d.get('campaign')}, via {d.get('payment_method')}, UTR: {d.get('utr')}, Receipt Status: {receipt_status}\n"
     else:
         user_context = "\nThis appears to be a new donor with no previous donation history in our system.\n"
-    
+
     # Add current date and time context
     current_datetime = datetime.now().strftime("%Y-%m-%d, %A, %H:%M")
     time_context = f"\nCurrent Date and Time: {current_datetime}\nOffice Hours: {OFFICE_HOURS}\nActive Campaigns: {', '.join(CURRENT_CAMPAIGNS)}\n"
 
     # Get chat history for this user
     history = user_chat_histories.get(phone_number, [])
-    
+
     # Initial message handling
     if not history:
         system_instruction = f"""You are Ananya, a friendly and helpful receptionist at Narayan Shiva Sansthan, a charitable organization.
@@ -243,24 +243,24 @@ Remember, you're the friendly face of Narayan Shiva Sansthan Foundation!
         )
 
         contents = [query]
-        
+
         try:
             response = client.models.generate_content(
                 model=model,
                 contents=contents,
                 config=generate_config
             )
-            
+
             full_response = response.text
-            
+
             # Update chat history
             user_chat_histories[phone_number] = [
                 {"role": "user", "content": query},
                 {"role": "assistant", "content": full_response}
             ]
-            
+
             return full_response
-            
+
         except Exception as e:
             print(f"Error generating response: {e}")
             return "Namaste! I apologize for the technical difficulty. Could you please repeat your question or maybe call our helpdesk at +91 88888-55555? I'd be happy to assist you further."
@@ -283,13 +283,13 @@ IMPORTANT FOR WHATSAPP: Keep your responses concise and to the point, suitable f
 
 Remember to be warm, personable, and helpful while maintaining the professional tone of a charity organization.
 """
-            
+
             # Initialize the chat
             chat = client.chats.create(model=model)
-            
+
             # Add the system instruction using a system message format
             chat.send_message(system_content)
-            
+
             # Add the conversation history (up to the last 5 exchanges to keep context manageable)
             for msg in history[-10:]:  # Limit to last 5 exchanges (10 messages)
                 if msg.get("role") == "user":
@@ -297,21 +297,21 @@ Remember to be warm, personable, and helpful while maintaining the professional 
                 elif msg.get("role") == "assistant":
                     # We don't send assistant messages back to the model
                     pass
-            
+
             # Send the current query
             response = chat.send_message(query)
             full_response = response.text
-            
+
             # Update the chat history
             updated_history = history.copy()
             updated_history.append({"role": "user", "content": query})
             updated_history.append({"role": "assistant", "content": full_response})
-            
+
             # Store the updated history
             user_chat_histories[phone_number] = updated_history
-            
+
             return full_response
-            
+
         except Exception as e:
             print(f"Error generating response: {e}")
             return "Namaste! I apologize for the technical difficulty. Could you please repeat your question or maybe call our helpdesk at +91 88888-55555? I'd be happy to assist you further."
@@ -332,37 +332,37 @@ async def handle_whatsapp_message(websocket, path):
             data = json.loads(message)
             phone_number = data.get('From')
             message_body = data.get('Body')
-            
+
             print(f"Received message from {phone_number}: {message_body}")
-            
+
             if not phone_number or not message_body:
                 error_message = format_whatsapp_response("Error: Phone number and message are required.")
                 await websocket.send(error_message)
                 continue
-            
+
             # Check if we've already processed this exact message recently (to avoid duplicates)
             cache_key = f"{phone_number}:{message_body}"
             if cache_key in last_response_cache:
                 await websocket.send(last_response_cache[cache_key])
                 continue
-            
+
             # Generate response
             response_text = await generate_response(message_body, phone_number)
-            
+
             # Format for WhatsApp
             whatsapp_response = format_whatsapp_response(response_text)
-            
+
             # Store in cache
             last_response_cache[cache_key] = whatsapp_response
-            
+
             # Clean up cache (keep only last 100 responses)
             if len(last_response_cache) > 100:
                 # Remove oldest item
                 last_response_cache.pop(next(iter(last_response_cache)))
-            
+
             # Send response
             await websocket.send(whatsapp_response)
-            
+
         except json.JSONDecodeError:
             error_message = format_whatsapp_response("Error: Invalid JSON format.")
             await websocket.send(error_message)
@@ -425,7 +425,7 @@ New Delhi - 110017
 async def main():
     print("Starting WhatsApp WebSocket server...")
     server = await websockets.serve(
-        handle_whatsapp_message, 
+        handle_whatsapp_message,
         "0.0.0.0",  # Listen on all available interfaces
         8765  # WebSocket port
     )
