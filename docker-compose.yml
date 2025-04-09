@@ -1,1 +1,38 @@
+version: '3.8'
 
+services:
+  websocket-server:
+    build: .
+    container_name: whatsapp-bot-server
+    restart: always
+    command: python whatsapp_bot.py
+    env_file:
+      - .env
+    ports:
+      - "8765:8765"
+    networks:
+      - whatsapp-bot-network
+    volumes:
+      - ./:/app
+
+  twilio-connector:
+    build: .
+    container_name: whatsapp-bot-connector
+    restart: always
+    command: python twilio_connector.py
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    networks:
+      - whatsapp-bot-network
+    depends_on:
+      - websocket-server
+    volumes:
+      - ./:/app
+    environment:
+      - WEBSOCKET_URL=ws://websocket-server:8765
+
+networks:
+  whatsapp-bot-network:
+    driver: bridge
